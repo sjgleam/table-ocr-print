@@ -7,12 +7,15 @@
   "license": "UNLICENSED",
   "private": true,
   "scripts": {
-    "start": "electron .",
-    "dist": "electron-builder --win"
+    "build": "tsc",
+    "start": "tsc && electron .",
+    "dist": "tsc && electron-builder --win"
   },
   "devDependencies": {
+    "@types/node": "^26.1.1",
     "electron": "^31.3.1",
-    "electron-builder": "^24.13.3"
+    "electron-builder": "^24.13.3",
+    "typescript": "^7.0.2"
   },
   "build": {
     "appId": "com.local.tableocrprint",
@@ -21,7 +24,8 @@
       "main.js",
       "preload.js",
       "renderer/**/*",
-      "src/**/*"
+      "src/**/*",
+      "!**/*.ts"
     ],
     "win": {
       "target": "nsis"
