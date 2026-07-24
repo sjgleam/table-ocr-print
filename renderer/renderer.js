@@ -1,5 +1,6 @@
 "use strict";
 (() => {
+    const DEFAULT_TITLE = "영어 단어 테스트";
     let items = [];
     let nextId = 1;
     let activeEditorId = null;
@@ -145,16 +146,11 @@
             return;
         }
         hideUploadError();
-        const hadNoItems = items.length === 0;
-        imageFiles.forEach((file, idx) => {
+        imageFiles.forEach((file) => {
             const reader = new FileReader();
             reader.onload = () => {
                 const id = nextId++;
-                const baseName = file.name.replace(/\.[^.]+$/, "") || `표${id}`;
-                items.push({ id, fileName: file.name, baseName, dataUrl: reader.result, tableData: null });
-                if (hadNoItems && idx === 0 && !$("#titleInput").value.trim()) {
-                    $("#titleInput").value = baseName;
-                }
+                items.push({ id, fileName: file.name, dataUrl: reader.result, tableData: null });
                 renderPreviewList();
                 updateExtractBtnState();
             };
@@ -417,7 +413,7 @@
       </div>`;
     }
     function renderAllSheets() {
-        const title = $("#titleInput").value.trim() || (items[0] && items[0].baseName) || "table";
+        const title = $("#titleInput").value.trim() || DEFAULT_TITLE;
         const dateStr = new Date().toLocaleDateString("ko-KR");
         const multi = items.length > 1;
         $("#sheet-en-wrap").innerHTML = items
@@ -453,8 +449,7 @@
             const orientation = btn.dataset.pdf;
             const target = btn.dataset.target;
             setPageCss(orientation);
-            const fallbackName = (items[0] && items[0].baseName) || "table";
-            const title = ($("#titleInput").value.trim() || fallbackName).replace(/[\\/:*?"<>|]/g, "_");
+            const title = ($("#titleInput").value.trim() || DEFAULT_TITLE).replace(/[\\/:*?"<>|]/g, "_");
             const suffix = target ? { en: "_EN", ko: "_KO" }[target] || "" : "";
             const result = await window.api.exportPdf(orientation === "landscape", `${title}${suffix}.pdf`);
             if (result && !result.canceled) {

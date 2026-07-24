@@ -11,10 +11,11 @@
   interface Item {
     id: number;
     fileName: string;
-    baseName: string;
     dataUrl: string;
     tableData: TableData | null;
   }
+
+  const DEFAULT_TITLE = "영어 단어 테스트";
 
   let items: Item[] = [];
   let nextId = 1;
@@ -167,16 +168,11 @@
       return;
     }
     hideUploadError();
-    const hadNoItems = items.length === 0;
-    imageFiles.forEach((file, idx) => {
+    imageFiles.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
         const id = nextId++;
-        const baseName = file.name.replace(/\.[^.]+$/, "") || `표${id}`;
-        items.push({ id, fileName: file.name, baseName, dataUrl: reader.result as string, tableData: null });
-        if (hadNoItems && idx === 0 && !$<HTMLInputElement>("#titleInput").value.trim()) {
-          $<HTMLInputElement>("#titleInput").value = baseName;
-        }
+        items.push({ id, fileName: file.name, dataUrl: reader.result as string, tableData: null });
         renderPreviewList();
         updateExtractBtnState();
       };
@@ -478,7 +474,7 @@
   }
 
   function renderAllSheets(): void {
-    const title = $<HTMLInputElement>("#titleInput").value.trim() || (items[0] && items[0].baseName) || "table";
+    const title = $<HTMLInputElement>("#titleInput").value.trim() || DEFAULT_TITLE;
     const dateStr = new Date().toLocaleDateString("ko-KR");
     const multi = items.length > 1;
 
@@ -519,8 +515,7 @@
       const orientation = btn.dataset.pdf!;
       const target = btn.dataset.target as "en" | "ko" | undefined;
       setPageCss(orientation);
-      const fallbackName = (items[0] && items[0].baseName) || "table";
-      const title = ($<HTMLInputElement>("#titleInput").value.trim() || fallbackName).replace(/[\\/:*?"<>|]/g, "_");
+      const title = ($<HTMLInputElement>("#titleInput").value.trim() || DEFAULT_TITLE).replace(/[\\/:*?"<>|]/g, "_");
       const suffix = target ? { en: "_EN", ko: "_KO" }[target] || "" : "";
       const result = await window.api.exportPdf(orientation === "landscape", `${title}${suffix}.pdf`);
       if (result && !result.canceled) {
