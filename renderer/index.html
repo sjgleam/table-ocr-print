@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>표 OCR 인쇄 도우미</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header id="app-header">
+    <h1>표 OCR 인쇄 도우미</h1>
+    <button id="settingsBtn" class="ghost-btn">⚙ 설정</button>
+  </header>
+
+  <nav id="stepNav" class="steps">
+    <button class="step-btn active" data-step="upload">1. 업로드 &amp; 인식</button>
+    <button class="step-btn" data-step="editor" disabled>2. 결과 확인/수정</button>
+    <button class="step-btn" data-step="preview" disabled>3. 인쇄 미리보기</button>
+  </nav>
+
+  <main>
+    <section id="upload" class="step-panel active">
+      <div id="dropZone" class="drop-zone">
+        <p>사진 파일을 여기로 끌어다 놓거나 클릭하여 선택하세요. (여러 장 선택 가능)</p>
+        <input type="file" id="fileInput" accept="image/*" multiple hidden />
+      </div>
+      <div id="previewList" class="preview-list"></div>
+      <div class="upload-actions">
+        <button id="extractBtn" class="primary-btn" disabled>표 인식 시작</button>
+      </div>
+      <div id="progressWrap" class="progress-wrap" hidden>
+        <div class="progress"><div id="progressBar" class="progress-bar"></div></div>
+        <div id="progressLabel" class="progress-label"></div>
+      </div>
+      <div id="uploadError" class="error-box" hidden></div>
+    </section>
+
+    <section id="editor" class="step-panel">
+      <div class="editor-toolbar">
+        <label>제목: <input type="text" id="titleInput" placeholder="예: Unit 3 단어" /></label>
+        <button id="toPreviewBtn" class="primary-btn">미리보기 생성 →</button>
+      </div>
+      <div id="editorTabs" class="editor-tabs" hidden></div>
+      <p class="hint">셀을 클릭해 직접 수정할 수 있어요. 각 열이 영어/한글/기타 중 무엇인지 확인해주세요.</p>
+      <div id="editorTableWrap"></div>
+    </section>
+
+    <section id="preview" class="step-panel">
+      <div class="preview-tabs no-print">
+        <button class="ptab-btn active" data-ptab="en">영어 전용 (한글 답 쓰기)</button>
+        <button class="ptab-btn" data-ptab="ko">한글 전용 (영어 답 쓰기)</button>
+        <span class="spacer"></span>
+        <button id="backToEditorBtn" class="ghost-btn">← 편집으로</button>
+      </div>
+
+      <div id="ptab-panel-en" class="ptab-panel active">
+        <div class="sheet-actions no-print">
+          <button class="primary-btn" data-print="portrait" data-target="en">🖨 인쇄</button>
+          <button class="ghost-btn" data-pdf="portrait" data-target="en">PDF로 저장</button>
+        </div>
+        <div id="sheet-en-wrap" class="sheet-wrap"></div>
+      </div>
+
+      <div id="ptab-panel-ko" class="ptab-panel">
+        <div class="sheet-actions no-print">
+          <button class="primary-btn" data-print="portrait" data-target="ko">🖨 인쇄</button>
+          <button class="ghost-btn" data-pdf="portrait" data-target="ko">PDF로 저장</button>
+        </div>
+        <div id="sheet-ko-wrap" class="sheet-wrap"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="settingsModal" class="modal-backdrop" hidden>
+    <div class="modal">
+      <h2>설정</h2>
+      <label class="modal-field">
+        인식 방식
+        <select id="providerSelect">
+          <option value="openai">OpenAI (GPT-4o Vision, 클라우드)</option>
+          <option value="ollama">Ollama (로컬 모델)</option>
+        </select>
+      </label>
+      <div id="openaiFields">
+        <label class="modal-field">
+          OpenAI API 키
+          <input type="password" id="apiKeyInput" placeholder="sk-..." />
+        </label>
+      </div>
+      <div id="ollamaFields" hidden>
+        <label class="modal-field">
+          Ollama 서버 주소
+          <input type="text" id="ollamaBaseUrlInput" placeholder="http://localhost:11434" />
+        </label>
+        <label class="modal-field">
+          모델 이름
+          <input type="text" id="ollamaModelInput" placeholder="llama3.2-vision" />
+        </label>
+      </div>
+      <p class="hint" id="settingsHint">표 인식(Vision)에 사용됩니다. 키는 이 PC에만 저장됩니다.</p>
+      <div id="settingsStatus" class="settings-status" hidden></div>
+      <div class="modal-actions">
+        <button id="closeSettingsBtn" class="ghost-btn">취소</button>
+        <button id="saveSettingsBtn" class="primary-btn">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

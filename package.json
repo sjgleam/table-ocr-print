@@ -1,0 +1,30 @@
+{
+  "name": "table-ocr-print",
+  "version": "1.0.0",
+  "description": "표 이미지를 OCR/VLM으로 인식해 영어/한글 분리 인쇄본을 만드는 Windows용 Electron 앱",
+  "main": "main.js",
+  "author": "",
+  "license": "UNLICENSED",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.local.tableocrprint",
+    "productName": "표 OCR 인쇄 도우미",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "src/**/*"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
