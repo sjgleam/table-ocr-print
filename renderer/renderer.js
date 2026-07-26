@@ -1,6 +1,11 @@
 "use strict";
 (() => {
     const DEFAULT_TITLE = "영어 단어 테스트";
+    // Height budget of one landscape A4 column: 22 rows (21 + the header) at the
+    // 28px row height set for .sheet.landscape is ~163mm, which together with
+    // the 24mm padding, the title block and a per-table caption stays under
+    // 210mm. Raising this is what makes a landscape sheet spill onto a 2nd page.
+    const ROWS_PER_LANDSCAPE_COLUMN = 21;
     let items = [];
     let nextId = 1;
     let activeEditorId = null;
@@ -40,24 +45,30 @@
     // ---------- Settings modal ----------
     const settingsModal = $("#settingsModal");
     const providerSelect = $("#providerSelect");
+    const paddleFields = $("#paddleFields");
     const openaiFields = $("#openaiFields");
     const ollamaFields = $("#ollamaFields");
     const settingsHint = $("#settingsHint");
+    const PROVIDER_HINTS = {
+        paddle: "이 PC의 Python(3.9~3.13) + PaddleOCR로 인식합니다 (오프라인/무료). 미리 'pip install paddlepaddle \"paddleocr[doc-parser]\"'가 필요하며, 최초 실행 시 모델 다운로드로 시간이 걸릴 수 있어요.",
+        openai: "표 인식(Vision)에 사용됩니다. 키는 이 PC에만 저장됩니다.",
+        ollama: "이 PC(또는 지정한 주소)에 Ollama가 실행 중이어야 합니다. 인식 정확도는 GPT-4o보다 낮을 수 있어요.",
+    };
     function updateProviderFieldsVisibility() {
-        const isOllama = providerSelect.value === "ollama";
-        openaiFields.hidden = isOllama;
-        ollamaFields.hidden = !isOllama;
-        settingsHint.textContent = isOllama
-            ? "이 PC(또는 지정한 주소)에 Ollama가 실행 중이어야 합니다. 인식 정확도는 GPT-4o보다 낮을 수 있어요."
-            : "표 인식(Vision)에 사용됩니다. 키는 이 PC에만 저장됩니다.";
+        const provider = providerSelect.value;
+        paddleFields.hidden = provider !== "paddle";
+        openaiFields.hidden = provider !== "openai";
+        ollamaFields.hidden = provider !== "ollama";
+        settingsHint.textContent = PROVIDER_HINTS[provider] || PROVIDER_HINTS.paddle;
     }
     providerSelect.addEventListener("change", updateProviderFieldsVisibility);
     $("#settingsBtn").addEventListener("click", async () => {
         const s = await window.api.getSettings();
-        providerSelect.value = s.provider || "openai";
+        providerSelect.value = s.provider || "paddle";
         $("#apiKeyInput").value = s.apiKey || "";
         $("#ollamaBaseUrlInput").value = s.ollamaBaseUrl || "http://localhost:11434";
         $("#ollamaModelInput").value = s.ollamaModel || "llama3.2-vision";
+        $("#paddlePythonPathInput").value = s.paddlePythonPath || "python";
         updateProviderFieldsVisibility();
         $("#settingsStatus").hidden = true;
         settingsModal.hidden = false;
@@ -70,6 +81,7 @@
         const key = $("#apiKeyInput").value.trim();
         const ollamaBaseUrl = $("#ollamaBaseUrlInput").value.trim() || "http://localhost:11434";
         const ollamaModel = $("#ollamaModelInput").value.trim() || "llama3.2-vision";
+        const paddlePythonPath = $("#paddlePythonPathInput").value.trim() || "python";
         if (provider === "openai" && !key) {
             statusBox.hidden = false;
             statusBox.className = "settings-status error";
@@ -79,7 +91,7 @@
         saveBtn.disabled = true;
         saveBtn.textContent = "저장 중...";
         try {
-            const result = await window.api.saveSettings({ provider, apiKey: key, ollamaBaseUrl, ollamaModel });
+            const result = await window.api.saveSettings({ provider, apiKey: key, ollamaBaseUrl, ollamaModel, paddlePythonPath });
             if (result && result.ok) {
                 statusBox.hidden = false;
                 statusBox.className = "settings-status success";
@@ -105,7 +117,7 @@
     });
     async function ensureApiKey() {
         const s = await window.api.getSettings();
-        if ((s.provider || "openai") === "openai" && !s.apiKey) {
+        if ((s.provider || "paddle") === "openai" && !s.apiKey) {
             providerSelect.value = "openai";
             $("#apiKeyInput").value = "";
             updateProviderFieldsVisibility();
@@ -249,11 +261,12 @@
                     throw new Error(readiness.error || "Ollama 서버를 사용할 수 없습니다.");
                 }
             }
+            const engineName = settings.provider === "paddle" ? "PaddleOCR" : "AI";
             for (let i = 0; i < pendingItems.length; i++) {
                 const it = pendingItems[i];
                 updateProgressLabel(pendingItems.length > 1
-                    ? `AI가 표를 분석하는 중입니다 (${i + 1}/${pendingItems.length})...`
-                    : "AI가 표를 분석하는 중입니다... 시간이 걸릴 수 있어요.");
+                    ? `${engineName}가 표를 분석하는 중입니다 (${i + 1}/${pendingItems.length})...`
+                    : `${engineName}가 표를 분석하는 중입니다... 시간이 걸릴 수 있어요.`);
                 it.tableData = await window.api.extractTable(it.dataUrl);
             }
             finishProgress(true, "인식이 완료되었습니다.");
@@ -366,6 +379,19 @@
         goToStep("preview");
     });
     $("#backToEditorBtn").addEventListener("click", () => goToStep("editor"));
+    // The layout drives both the sheet HTML and the paper orientation, so the
+    // print/PDF buttons read it instead of carrying a fixed orientation.
+    const layoutSelect = $("#layoutSelect");
+    function currentLayout() {
+        return layoutSelect.value === "landscape2" ? "landscape2" : "portrait";
+    }
+    function currentOrientation() {
+        return currentLayout() === "landscape2" ? "landscape" : "portrait";
+    }
+    layoutSelect.addEventListener("change", () => {
+        if (items.length)
+            renderAllSheets();
+    });
     $$(".ptab-btn").forEach((btn) => {
         btn.addEventListener("click", () => {
             $$(".ptab-btn").forEach((b) => b.classList.toggle("active", b === btn));
@@ -402,26 +428,97 @@
         html += "</tbody></table>";
         return html;
     }
-    function buildSheetPage(item, idx, title, dateStr, multi, heading, keepLangs, answerLabel) {
+    function sheetHead(title, heading, sub) {
+        return `<h2 class="sheet-title">${escapeHtml(title)} — ${heading}</h2>
+        <p class="sheet-sub">${escapeHtml(sub)}</p>`;
+    }
+    // One portrait A4 per image, the whole table in a single column.
+    function buildPortraitSheet(item, title, heading, sub, keepLangs, answerLabel) {
         const { columns, rows } = item.tableData || { columns: [], rows: [] };
-        const sub = multi ? `${dateStr} · ${item.fileName} (${idx + 1}/${items.length})` : dateStr;
         return `
       <div class="sheet portrait">
-        <h2 class="sheet-title">${escapeHtml(title)} — ${heading}</h2>
-        <p class="sheet-sub">${escapeHtml(sub)}</p>
+        ${sheetHead(title, heading, sub)}
         ${buildFilteredTableHtml(columns, rows, keepLangs, answerLabel)}
       </div>`;
+    }
+    // Landscape sheets carry two table blocks side by side. Blocks come from
+    // every uploaded image in order, so two photos share one page instead of
+    // taking one each, and a table too tall for one column is split across as
+    // many balanced columns as it needs (30 rows → 15+15, not 21+9).
+    function collectLandscapeBlocks() {
+        const blocks = [];
+        items.forEach((item) => {
+            const rows = (item.tableData && item.tableData.rows) || [];
+            const parts = Math.max(1, Math.ceil(rows.length / ROWS_PER_LANDSCAPE_COLUMN));
+            const size = Math.ceil(rows.length / parts);
+            for (let p = 0; p < parts; p++) {
+                blocks.push({ item, rows: rows.slice(p * size, (p + 1) * size) });
+            }
+        });
+        // A single short table would otherwise leave half the sheet blank, so
+        // halve it — the page then really does hold the two tables it promises.
+        if (blocks.length === 1 && blocks[0].rows.length > 1) {
+            const only = blocks[0];
+            const half = Math.ceil(only.rows.length / 2);
+            return [
+                { item: only.item, rows: only.rows.slice(0, half) },
+                { item: only.item, rows: only.rows.slice(half) },
+            ];
+        }
+        return blocks;
+    }
+    function buildLandscapeBlockHtml(block, multi, keepLangs, answerLabel) {
+        const columns = (block.item.tableData && block.item.tableData.columns) || [];
+        // With one image there's nothing to tell apart, so the caption only earns
+        // its vertical space when blocks can come from different photos.
+        const caption = multi ? `<p class="col-caption">${escapeHtml(block.item.fileName)}</p>` : "";
+        return `<div class="sheet-col">
+            ${caption}
+            ${buildFilteredTableHtml(columns, block.rows, keepLangs, answerLabel)}
+          </div>`;
+    }
+    function buildLandscapeSheets(title, dateStr, multi, heading, keepLangs, answerLabel) {
+        const blocks = collectLandscapeBlocks();
+        const pages = [];
+        for (let i = 0; i < blocks.length; i += 2)
+            pages.push(blocks.slice(i, i + 2));
+        return pages
+            .map((pageBlocks, pi) => {
+            const sub = pages.length > 1 ? `${dateStr} · ${pi + 1}/${pages.length}쪽` : dateStr;
+            const cols = pageBlocks
+                .map((block) => buildLandscapeBlockHtml(block, multi, keepLangs, answerLabel))
+                .join("\n          ");
+            // An odd number of blocks leaves the last right half empty; the
+            // filler keeps the lone table at half width instead of stretching it.
+            const filler = pageBlocks.length < 2 ? '<div class="sheet-col"></div>' : "";
+            return `
+      <div class="sheet landscape">
+        ${sheetHead(title, heading, sub)}
+        <div class="sheet-cols">
+          ${cols}
+          ${filler}
+        </div>
+      </div>`;
+        })
+            .join("");
+    }
+    function buildSheets(title, dateStr, multi, heading, keepLangs, answerLabel) {
+        if (currentLayout() === "landscape2") {
+            return buildLandscapeSheets(title, dateStr, multi, heading, keepLangs, answerLabel);
+        }
+        return items
+            .map((it, idx) => {
+            const sub = multi ? `${dateStr} · ${it.fileName} (${idx + 1}/${items.length})` : dateStr;
+            return buildPortraitSheet(it, title, heading, sub, keepLangs, answerLabel);
+        })
+            .join("");
     }
     function renderAllSheets() {
         const title = $("#titleInput").value.trim() || DEFAULT_TITLE;
         const dateStr = new Date().toLocaleDateString("ko-KR");
         const multi = items.length > 1;
-        $("#sheet-en-wrap").innerHTML = items
-            .map((it, idx) => buildSheetPage(it, idx, title, dateStr, multi, "English", ["en"], "한글 뜻 쓰기"))
-            .join("");
-        $("#sheet-ko-wrap").innerHTML = items
-            .map((it, idx) => buildSheetPage(it, idx, title, dateStr, multi, "한글", ["ko"], "English 쓰기"))
-            .join("");
+        $("#sheet-en-wrap").innerHTML = buildSheets(title, dateStr, multi, "English", ["en"], "한글 뜻 쓰기");
+        $("#sheet-ko-wrap").innerHTML = buildSheets(title, dateStr, multi, "한글", ["ko"], "English 쓰기");
     }
     // ---------- Print / PDF ----------
     function setPageCss(orientation) {
@@ -439,14 +536,14 @@
     }
     $$("[data-print]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-            const orientation = btn.dataset.print;
+            const orientation = currentOrientation();
             setPageCss(orientation);
             await window.api.printNow(orientation === "landscape");
         });
     });
     $$("[data-pdf]").forEach((btn) => {
         btn.addEventListener("click", async () => {
-            const orientation = btn.dataset.pdf;
+            const orientation = currentOrientation();
             const target = btn.dataset.target;
             setPageCss(orientation);
             const title = ($("#titleInput").value.trim() || DEFAULT_TITLE).replace(/[\\/:*?"<>|]/g, "_");

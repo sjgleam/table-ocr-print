@@ -3,6 +3,8 @@ import * as path from "path";
 import * as fs from "fs";
 import { spawn } from "child_process";
 import { extractTableFromImage } from "./src/vlm";
+import { extractTableWithPaddle } from "./src/paddle";
+import { upscaleForRecognition } from "./src/image";
 import type {
   ExportPdfResult,
   OllamaReadiness,
@@ -127,9 +129,10 @@ ipcMain.handle("get-settings", (): ResolvedSettings => {
   const s = loadSettings();
   return {
     apiKey: s.apiKey || "",
-    provider: (s.provider || "openai") as Provider,
+    provider: (s.provider || "paddle") as Provider,
     ollamaBaseUrl: s.ollamaBaseUrl || "http://localhost:11434",
     ollamaModel: s.ollamaModel || "llama3.2-vision",
+    paddlePythonPath: s.paddlePythonPath || "python",
   };
 });
 
@@ -151,10 +154,16 @@ ipcMain.handle("ensure-ollama-ready", async (_event, { baseUrl }: { baseUrl?: st
 
 ipcMain.handle("extract-table", async (_event, { dataUrl }: { dataUrl: string }) => {
   const settings = loadSettings();
+  const provider = (settings.provider || "paddle") as Provider;
+  if (provider === "paddle") {
+    // scripts/paddle_table.py upscales the image itself; doing it here too
+    // would just resample it twice.
+    return await extractTableWithPaddle({ dataUrl, pythonPath: settings.paddlePythonPath });
+  }
   return await extractTableFromImage({
-    provider: (settings.provider || "openai") as Provider,
+    provider,
     apiKey: settings.apiKey,
-    dataUrl,
+    dataUrl: upscaleForRecognition(dataUrl),
     ollamaBaseUrl: settings.ollamaBaseUrl,
     ollamaModel: settings.ollamaModel,
   });

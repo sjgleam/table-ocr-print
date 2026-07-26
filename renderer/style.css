@@ -202,17 +202,54 @@ table.edit-table .row-del-btn {
 .ptab-panel { display: none; }
 .ptab-panel.active { display: block; }
 
+.layout-field { font-size: 13px; color: #444; display: flex; align-items: center; gap: 6px; }
+.layout-field select {
+  padding: 7px 8px; border: 1px solid #cfd3da; border-radius: 6px; font-size: 13px; background: #fff;
+}
+
 .sheet-actions { display: flex; gap: 8px; margin-bottom: 12px; }
 
-.sheet-wrap { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+/* A landscape sheet is 297mm wide — wider than <main> — so let it scroll
+   sideways here rather than overflow the app layout. Print undoes this. */
+.sheet-wrap { display: flex; flex-direction: column; align-items: center; gap: 24px; overflow-x: auto; }
 
 .sheet {
   background: #fff;
   margin: 0 auto;
   box-shadow: 0 0 0 1px #ddd, 0 6px 18px rgba(0,0,0,0.08);
   padding: 18mm 14mm;
+  flex: none;
 }
 .sheet.portrait { width: 210mm; min-height: 297mm; }
+/* Two tables side by side on a landscape A4. The padding is tighter than the
+   portrait sheet's because the short side (210mm) is the scarce one here. */
+.sheet.landscape { width: 297mm; min-height: 210mm; padding: 12mm; }
+
+/* 170mm = the 210mm page minus 24mm padding, the ~13mm title block and a few
+   mm of slack (at 210.0mm the sheet spilled onto a second page). Giving the
+   container a height is what lets the tables stretch their rows to fill the
+   sheet instead of leaving the bottom third blank; a table can never shrink
+   below its content, so ROWS_PER_LANDSCAPE_COLUMN (renderer.ts) is the other
+   half of keeping this on one page. */
+.sheet-cols { display: flex; gap: 8mm; align-items: stretch; height: 170mm; }
+.sheet-cols > .sheet-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.sheet-col table.print-table { flex: 1 1 auto; }
+.sheet-col .col-caption {
+  font-size: 11px; color: #666; margin: 0 0 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.sheet.landscape h2.sheet-title { font-size: 16px; }
+.sheet.landscape .sheet-sub { margin-bottom: 8px; }
+.sheet.landscape table.print-table th,
+.sheet.landscape table.print-table td { font-size: 12px; padding: 4px 6px; }
+.sheet.landscape table.print-table td.answer-cell { height: 28px; }
+
+/* Preview only: a 297mm sheet is wider than the app's content column, so it
+   is shown slightly reduced. Print/PDF use the print stylesheet and so keep
+   the sheet at full size. */
+@media screen {
+  .sheet.landscape { zoom: 0.9; }
+}
 
 .sheet h2.sheet-title { font-size: 18px; margin: 0 0 4px; }
 .sheet .sheet-sub { font-size: 11px; color: #888; margin: 0 0 16px; }
@@ -270,7 +307,9 @@ table.print-table td.answer-cell { height: 32px; }
   #preview { display: block !important; padding: 0; margin: 0; max-width: none; }
   .ptab-panel { display: none !important; }
   .ptab-panel.active { display: block !important; }
-  .sheet-wrap { gap: 0; }
+  /* overflow-x:auto is a preview-only affordance; a scroll container here
+     would clip the sheet instead of paginating it. */
+  .sheet-wrap { gap: 0; overflow: visible; }
   /* .sheet.portrait is fixed at width:210mm (the FULL physical A4 width) —
      that's unchanged here since .sheet.portrait's own rule (higher
      specificity) wins anyway. Its 18mm/14mm padding (kept, not zeroed) is

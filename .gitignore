@@ -3,3 +3,15 @@ dist/
 *.log
 settings.json
 .env
+
+# Benchmarks and notes stay local, in full — nothing under these ships with
+# the app. They also happen to be the heavy, redistribution-unfriendly parts:
+# bench/images/ is ~11MB of generated output, bench-papers/ holds ~450MB of
+# published-paper PDFs plus verbatim transcriptions of them.
+# Note that CLAUDE.md / PROGRESS.md / README.md link into these folders, so
+# those links only resolve in a working copy that has them.
+bench*/
+docs/
+
+__pycache__/
+*.pyc

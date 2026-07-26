@@ -17,6 +17,18 @@ Each row array length must equal the columns array length.`;
 
 const USER_PROMPT = "이 이미지 속 표를 위 규칙에 따라 JSON으로 추출해줘. 번역하거나 고치지 말고 원문 그대로 옮겨줘.";
 
+// Second pass, used only to re-read a column the first pass returned blank.
+const COLUMN_SYSTEM_PROMPT = `You transcribe ONE single column out of a photographed table.
+Respond with ONLY a JSON object {"values": ["...", "...", ...]}: one string per data row, top to bottom, exactly as written.
+Do NOT translate, correct spelling, or paraphrase. Do NOT include the header row. Do NOT skip or merge rows.`;
+
+function columnUserPrompt(colIndex: number, colCount: number, rowCount: number): string {
+  return (
+    `이 이미지 속 표에는 열이 ${colCount}개 있습니다. 왼쪽에서 ${colIndex + 1}번째 열의 값만 ` +
+    `위에서 아래로 순서대로 뽑아줘. 머리글 행은 빼고 데이터 행 ${rowCount}개를 그대로 옮겨줘.`
+  );
+}
+
 interface RawParsed {
   columns?: Array<{ header?: unknown; lang?: unknown }>;
   rows?: unknown[];
@@ -48,10 +60,14 @@ async function callOpenAI({
   apiKey,
   dataUrl,
   model,
+  systemPrompt,
+  userPrompt,
 }: {
   apiKey?: string;
   dataUrl: string;
   model?: string;
+  systemPrompt: string;
+  userPrompt: string;
 }): Promise<string> {
   if (!apiKey) {
     throw new Error("OpenAI API 키가 설정되지 않았습니다. 설정에서 API 키를 입력해주세요.");
@@ -62,11 +78,11 @@ async function callOpenAI({
     temperature: 0,
     response_format: { type: "json_object" },
     messages: [
-      { role: "system", content: SYSTEM_PROMPT },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: [
-          { type: "text", text: USER_PROMPT },
+          { type: "text", text: userPrompt },
           { type: "image_url", image_url: { url: dataUrl, detail: "high" } },
         ],
       },
@@ -111,11 +127,15 @@ async function callOllamaOnce({
   model,
   base64,
   useJsonFormat,
+  systemPrompt,
+  userPrompt,
 }: {
   url: string;
   model?: string;
   base64: string;
   useJsonFormat: boolean;
+  systemPrompt: string;
+  userPrompt: string;
 }): Promise<OllamaOnceResult> {
   let res: Response;
   try {
@@ -129,8 +149,8 @@ async function callOllamaOnce({
         ...(useJsonFormat ? { format: "json" } : {}),
         options: { temperature: 0, num_predict: 8192, num_ctx: 8192 },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: USER_PROMPT, images: [base64] },
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt, images: [base64] },
         ],
       }),
     });
@@ -175,20 +195,25 @@ async function callOllama({
   dataUrl,
   baseUrl,
   model,
+  systemPrompt,
+  userPrompt,
 }: {
   dataUrl: string;
   baseUrl?: string;
   model?: string;
+  systemPrompt: string;
+  userPrompt: string;
 }): Promise<string> {
   const base64 = dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl;
   const url = `${(baseUrl || "http://localhost:11434").replace(/\/+$/, "")}/api/chat`;
+  const prompts = { systemPrompt, userPrompt };
 
-  let { content, raw } = await callOllamaOnce({ url, model, base64, useJsonFormat: true });
+  let { content, raw } = await callOllamaOnce({ url, model, base64, useJsonFormat: true, ...prompts });
   if (!content || !content.trim()) {
     // Some models return empty output when a strict JSON-grammar constraint
     // is combined with image input — retry once without forcing it. The
     // JSON.parse step downstream still validates/rejects malformed output.
-    ({ content, raw } = await callOllamaOnce({ url, model, base64, useJsonFormat: false }));
+    ({ content, raw } = await callOllamaOnce({ url, model, base64, useJsonFormat: false, ...prompts }));
   }
   if (!content || !content.trim()) {
     const salvaged = extractJsonBlob(raw?.message?.thinking);
@@ -202,18 +227,61 @@ async function callOllama({
   return content;
 }
 
-export async function extractTableFromImage({
-  provider,
-  apiKey,
-  dataUrl,
-  model,
-  ollamaBaseUrl,
-  ollamaModel,
-}: ExtractParams): Promise<TableData> {
-  const content =
-    provider === "ollama"
-      ? await callOllama({ dataUrl, baseUrl: ollamaBaseUrl, model: ollamaModel })
-      : await callOpenAI({ apiKey, dataUrl, model });
+function askModel(
+  { provider, apiKey, dataUrl, model, ollamaBaseUrl, ollamaModel }: ExtractParams,
+  systemPrompt: string,
+  userPrompt: string
+): Promise<string> {
+  return provider === "ollama"
+    ? callOllama({ dataUrl, baseUrl: ollamaBaseUrl, model: ollamaModel, systemPrompt, userPrompt })
+    : callOpenAI({ apiKey, dataUrl, model, systemPrompt, userPrompt });
+}
+
+// A VLM asked for a whole table at once can hand back a column it declared in
+// "columns" but left "" in every single row — qwen2.5vl does this to the
+// RIGHTMOST column of a two-block word table, which is why the printed sheet
+// had an empty 3rd column. The same model reads that column correctly when
+// asked for it alone, so re-ask, once per blank column.
+//
+// The re-read is only merged when it returns exactly one value per row:
+// a short/long answer would mean the model skipped or invented rows, and
+// mis-paired words are worse on a practice sheet than a blank column.
+const MAX_COLUMN_REPAIRS = 2;
+
+function isBlank(value: string | undefined): boolean {
+  return !value || !value.trim();
+}
+
+async function repairBlankColumns(table: TableData, params: ExtractParams): Promise<void> {
+  const { columns, rows } = table;
+  if (rows.length < 2) return;
+
+  const blank = columns.map((_c, i) => i).filter((i) => rows.every((r) => isBlank(r[i])));
+  // Every column blank means the extraction failed outright, not that one
+  // column slipped through — re-reading columns one by one won't save that.
+  if (!blank.length || blank.length === columns.length) return;
+
+  for (const colIndex of blank.slice(0, MAX_COLUMN_REPAIRS)) {
+    try {
+      const content = await askModel(
+        params,
+        COLUMN_SYSTEM_PROMPT,
+        columnUserPrompt(colIndex, columns.length, rows.length)
+      );
+      const values = JSON.parse(content)?.values;
+      if (!Array.isArray(values) || values.length !== rows.length) continue;
+      values.forEach((value, ri) => {
+        rows[ri][colIndex] = value == null ? "" : String(value);
+      });
+    } catch {
+      // Best effort: keep the blank column rather than failing the whole run.
+    }
+  }
+}
+
+export async function extractTableFromImage(params: ExtractParams): Promise<TableData> {
+  const { provider } = params;
+  const content = await askModel(params, SYSTEM_PROMPT, USER_PROMPT);
 
   const sourceLabel = provider === "ollama" ? "Ollama" : "OpenAI";
 
@@ -240,5 +308,7 @@ export async function extractTableFromImage({
     return r.slice(0, columns.length).map((cell) => (cell == null ? "" : String(cell)));
   });
 
-  return { columns, rows };
+  const table: TableData = { columns, rows };
+  await repairBlankColumns(table, params);
+  return table;
 }

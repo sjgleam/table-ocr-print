@@ -48,22 +48,29 @@
       <div class="preview-tabs no-print">
         <button class="ptab-btn active" data-ptab="en">영어 전용 (한글 답 쓰기)</button>
         <button class="ptab-btn" data-ptab="ko">한글 전용 (영어 답 쓰기)</button>
+        <label class="layout-field">
+          인쇄 형식
+          <select id="layoutSelect">
+            <option value="portrait">세로 A4 · 한 장에 표 1개</option>
+            <option value="landscape2">가로 A4 · 한 장에 표 2개</option>
+          </select>
+        </label>
         <span class="spacer"></span>
         <button id="backToEditorBtn" class="ghost-btn">← 편집으로</button>
       </div>
 
       <div id="ptab-panel-en" class="ptab-panel active">
         <div class="sheet-actions no-print">
-          <button class="primary-btn" data-print="portrait" data-target="en">🖨 인쇄</button>
-          <button class="ghost-btn" data-pdf="portrait" data-target="en">PDF로 저장</button>
+          <button class="primary-btn" data-print data-target="en">🖨 인쇄</button>
+          <button class="ghost-btn" data-pdf data-target="en">PDF로 저장</button>
         </div>
         <div id="sheet-en-wrap" class="sheet-wrap"></div>
       </div>
 
       <div id="ptab-panel-ko" class="ptab-panel">
         <div class="sheet-actions no-print">
-          <button class="primary-btn" data-print="portrait" data-target="ko">🖨 인쇄</button>
-          <button class="ghost-btn" data-pdf="portrait" data-target="ko">PDF로 저장</button>
+          <button class="primary-btn" data-print data-target="ko">🖨 인쇄</button>
+          <button class="ghost-btn" data-pdf data-target="ko">PDF로 저장</button>
         </div>
         <div id="sheet-ko-wrap" class="sheet-wrap"></div>
       </div>
@@ -76,11 +83,18 @@
       <label class="modal-field">
         인식 방식
         <select id="providerSelect">
+          <option value="paddle">PaddleOCR (로컬 OCR, 기본값)</option>
           <option value="openai">OpenAI (GPT-4o Vision, 클라우드)</option>
           <option value="ollama">Ollama (로컬 모델)</option>
         </select>
       </label>
-      <div id="openaiFields">
+      <div id="paddleFields">
+        <label class="modal-field">
+          Python 실행 파일 경로
+          <input type="text" id="paddlePythonPathInput" placeholder="python" />
+        </label>
+      </div>
+      <div id="openaiFields" hidden>
         <label class="modal-field">
           OpenAI API 키
           <input type="password" id="apiKeyInput" placeholder="sk-..." />

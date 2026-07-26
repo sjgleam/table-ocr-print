@@ -38,6 +38,8 @@ const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
 const child_process_1 = require("child_process");
 const vlm_1 = require("./src/vlm");
+const paddle_1 = require("./src/paddle");
+const image_1 = require("./src/image");
 const SETTINGS_PATH = () => path.join(electron_1.app.getPath("userData"), "settings.json");
 function loadSettings() {
     try {
@@ -145,9 +147,10 @@ electron_1.ipcMain.handle("get-settings", () => {
     const s = loadSettings();
     return {
         apiKey: s.apiKey || "",
-        provider: (s.provider || "openai"),
+        provider: (s.provider || "paddle"),
         ollamaBaseUrl: s.ollamaBaseUrl || "http://localhost:11434",
         ollamaModel: s.ollamaModel || "llama3.2-vision",
+        paddlePythonPath: s.paddlePythonPath || "python",
     };
 });
 electron_1.ipcMain.handle("save-settings", (_event, settings) => {
@@ -167,10 +170,16 @@ electron_1.ipcMain.handle("ensure-ollama-ready", async (_event, { baseUrl }) => 
 });
 electron_1.ipcMain.handle("extract-table", async (_event, { dataUrl }) => {
     const settings = loadSettings();
+    const provider = (settings.provider || "paddle");
+    if (provider === "paddle") {
+        // scripts/paddle_table.py upscales the image itself; doing it here too
+        // would just resample it twice.
+        return await (0, paddle_1.extractTableWithPaddle)({ dataUrl, pythonPath: settings.paddlePythonPath });
+    }
     return await (0, vlm_1.extractTableFromImage)({
-        provider: (settings.provider || "openai"),
+        provider,
         apiKey: settings.apiKey,
-        dataUrl,
+        dataUrl: (0, image_1.upscaleForRecognition)(dataUrl),
         ollamaBaseUrl: settings.ollamaBaseUrl,
         ollamaModel: settings.ollamaModel,
     });

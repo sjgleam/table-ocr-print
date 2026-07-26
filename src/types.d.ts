@@ -10,7 +10,7 @@ export interface TableData {
   rows: string[][];
 }
 
-export type Provider = "openai" | "ollama";
+export type Provider = "paddle" | "openai" | "ollama";
 
 /** Shape persisted to settings.json (all fields optional/partial). */
 export interface Settings {
@@ -18,6 +18,7 @@ export interface Settings {
   provider?: Provider;
   ollamaBaseUrl?: string;
   ollamaModel?: string;
+  paddlePythonPath?: string;
 }
 
 /** Shape returned by get-settings, with defaults already applied. */
@@ -26,6 +27,7 @@ export interface ResolvedSettings {
   provider: Provider;
   ollamaBaseUrl: string;
   ollamaModel: string;
+  paddlePythonPath: string;
 }
 
 export interface SaveSettingsResult {
