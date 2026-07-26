@@ -1,4 +1,4 @@
-# 표 OCR 인쇄 도우미 (Electron)
+# 단어 시험지 만들기 (Electron)
 
 사진 속 표(영어/한글 혼합)를 OCR(PaddleOCR, 기본값) 또는 VLM(Vision-Language Model)으로 인식해서,
 영어 전용 시험지 / 한글 전용 시험지(각각 오른쪽에 답 쓰는 빈 칸 포함, 세로 A4 1페이지 1표 또는 가로 A4 1페이지 2표)를 만들어

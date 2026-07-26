@@ -19,7 +19,7 @@
   },
   "build": {
     "appId": "com.local.tableocrprint",
-    "productName": "표 OCR 인쇄 도우미",
+    "productName": "단어 시험지 만들기",
     "files": [
       "main.js",
       "preload.js",
